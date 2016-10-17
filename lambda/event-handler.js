@@ -1,16 +1,17 @@
 console.log('Loading function');
 
-var event = require('./test_data.json');
-var secret = 'ic638bFLYi6bKzbTGpfAo53hxq8B2NXA8l1NxPL6';
+const crypto   = require('crypto'),
+      bufferEq = require('buffer-equal-constant-time'),
+      event    = require('./test_data.json'),
+      semver   = require('semver');
 
-const crypto   = require('crypto')
-    , bufferEq = require('buffer-equal-constant-time');
+var secret = 'ic638bFLYi6bKzbTGpfAo53hxq8B2NXA8l1NxPL6';
 
 function sign_request(key, request) {
   return 'sha1=' + crypto.createHmac('sha1', key).update(request).digest('hex');
 };
 
-//exports.handler = function(event, context) {
+//exports.handler = function(event, context, callback) {
   console.log('Recieved event:');
 //  console.log(JSON.stringify(event, null, ' '));
   
@@ -18,22 +19,22 @@ function sign_request(key, request) {
   console.log('X-GitHub-Signature: %s', event.headers['X-Hub-Signature']);
   console.log('Calculated-Signature: %s', calculated_signature);
 
-  if (bufferEq(new Buffer(event.headers['X-Hub-Signature']), calculated_signature)) {
+  // check failure conditions
+  if (!bufferEq(new Buffer(event.headers['X-Hub-Signature']), calculated_signature)) {
+    //callback(new Error('X-Hub-Signature does not match request signature'));
     return console.error('X-Hub-Signature does not match request signature');
-  };
-
-  var semver = require('semver');
-  if (event.headers['X-GitHub-Event'] == 'release' ) {
-    if (semver.valid(event.body.release.tag_name)) {
-      console.log('Building Release: %s', event.body.release.tag_name);
-      // add code to launch ECS container
-    }
-    else {
-      console.log('%s is not a valid semver, aborting build...', event.release.tag_name);
-    }
+  } 
+  else if (event.headers['X-GitHub-Event'] != 'release' ) {
+    //callback(new Error('GitHub event is not a release, aborting...'));
+    return console.error('GitHub event is not a release, aborting...');
+  } 
+  else if (!semver.valid(event.body.release.tag_name)) {
+    //callback(new Error('%s is not a valid semver, aborting build...', event.body.release.tag_name));
+    return console.error('%s is not a valid semver, aborting build...', event.body.release.tag_name);
   }
   else {
-    console.log('GitHub event is not a release, aborting...');
+    console.log('Building Release: %s', event.body.release.tag_name);
+    // add code to launch ECS container
   }
 
 //};
