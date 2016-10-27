@@ -24,7 +24,8 @@ RUN chmod 644 ./get-pip.py \
 
 # drop the rpm-build script and spec file
 COPY scripts/build-rpm.sh .
-RUN chmod 755 ./build-rpm.sh && ln -s ${home}/build-rpm.sh /usr/local/bin/build-rpm
+RUN chmod 755 ./build-rpm.sh \
+ && ln -s ${home}/build-rpm.sh /usr/local/bin/build-rpm
 
 # set the entry point to build-rpm.sh so we can just docker run <container>
 ENTRYPOINT ["build-rpm"]

@@ -44,15 +44,17 @@ curl --location \
      --user $GITHUB_USER:$GITHUB_TOKEN \
      --header 'Accept: application/vnd.github.v3.raw' \
      --output $spec_dir/$spec_file \
-     https://api.github.com/repos/$REPO_FULLNAME/content/$spec_file?ref=tags/$VERSION
+     https://api.github.com/repos/$REPO_FULLNAME/contents/$spec_file?ref=tags/$VERSION
 
 # install build dependencies
 yum-builddep -y $spec_dir/$spec_file
 
 # build the ruby rpms
 rpmbuild -bb \
-  #--define "_ruby_ver $ruby_semver" \
-  $spec_file
+  --define "_version $VERSION" \
+  --define "_source $TARBALL_URL" \
+  --define "_repo $REPO" \
+  $spec_dir/$spec_file
 
 exit 0
 
