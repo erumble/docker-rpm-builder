@@ -118,7 +118,7 @@ rpm_build_code=$?
 #############################################
 
 if [ $rpm_build_code -eq 0 ]; then
-  build_finished_message="\r\nBuild finisehd on $(date)\r\n\r\n#### MD5 Sums"
+  build_finished_message="\r\nBuild finished on $(date)\r\n\r\n#### MD5 Sums"
   for rpm in $(find $rpm_dir -type f -name *.rpm); do
     build_finished_message=$build_finished_message"\r\n* $(openssl md5 $rpm | awk -F '[ /)]' '{print $6 " - " $8 "\n"}')"
     upload_file_to_release $rpm
