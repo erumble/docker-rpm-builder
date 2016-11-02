@@ -1,7 +1,9 @@
-#!/bin/sh -ex
+#!/bin/sh -eu
 
 ######################################################################
 # TODO: deposit the RPM to an s3 bucket
+# TODO: handle errors
+# TODO: make it idempotent
 ######################################################################
 
 ################################
@@ -19,7 +21,7 @@
 #############
 
 function get_json_value {
-  jq -n --argjson json "$1" --arg val "$2" '$json | ."\($val)"'
+  jq -r -n --argjson json "$1" --arg val "$2" '$json | ."\($val)"'
 }
 
 function create_release_body {
@@ -30,20 +32,28 @@ function create_release_body {
 
 function patch_release {
   curl \
-    --write-out "%{http_code}\\n" \
-    --silent \
-    --location \
-    --retry 3 \
-    --request PATCH \
-    --output /dev/null \
-    --user $GITHUB_USER:$GITHUB_TOKEN \
-    --header 'Content-Type: application/json' \
     --data "$1" \
+    --header 'Content-Type: application/json' \
+    --location \
+    --output /dev/null \
+    --request PATCH \
+    --retry 3 \
+    --silent \
+    --user $GITHUB_USER:$GITHUB_TOKEN \
+    --write-out "%{http_code}\\n" \
     https://api.github.com/repos/$repo_fullname/releases/$release_id
 }
 
-function get_rpm_info {
-  openssl md5 $1 | awk '{print $2}'
+function upload_file_to_release {
+  asset_name="${1##*/}"
+
+  curl \
+    --data-binary @$1 \
+    --header "Content-Type: $(file -b --mime-type $1)" \
+    --request POST \
+    --retry 3 \
+    --user $GITHUB_USER:$GITHUB_TOKEN \
+    https://uploads.github.com/repos/$repo_fullname/releases/$release_id/assets?name=$asset_name
 }
 
 #############
@@ -52,12 +62,13 @@ function get_rpm_info {
 
 release_id=$(get_json_value "$RELEASE" "id")
 version=$(get_json_value "$RELEASE" "tag_name")
+name=$(get_json_value "$RELEASE" "name")
 tarball_url=$(get_json_value "$RELEASE" "tarball_url")
 
 repo=$(get_json_value "$REPOSITORY" "name")
 repo_fullname=$(get_json_value "$REPOSITORY" "full_name")
 
-spec_file=${REPO}_rpm.spec
+spec_file=${repo}_rpm.spec
 rpmbuild_dir=/root/rpmbuild
 source_dir=$rpmbuild_dir/SOURCES
 spec_dir=$rpmbuild_dir/SPECS
@@ -79,8 +90,8 @@ patch_release "$build_start_body"
 curl --location \
   --retry 3 \
   --user $GITHUB_USER:$GITHUB_TOKEN \
-  --output $source_dir/$VERSION.tar.gz \
-  https://github.com/$REPO_FULLNAME/archive/$VERSION.tar.gz
+  --output $source_dir/$version.tar.gz \
+  https://github.com/$repo_fullname/archive/$version.tar.gz
 
 # download the spec file to ${home}/rpmbuild/SPECS
 curl --location \
@@ -88,16 +99,16 @@ curl --location \
   --user $GITHUB_USER:$GITHUB_TOKEN \
   --header 'Accept: application/vnd.github.v3.raw' \
   --output $spec_dir/$spec_file \
-  https://api.github.com/repos/$REPO_FULLNAME/contents/$spec_file?ref=tags/$VERSION
+  https://api.github.com/repos/$repo_fullname/contents/$spec_file?ref=tags/$version
 
 # install build dependencies
 yum-builddep -y $spec_dir/$spec_file
 
 # build the rpm
 rpmbuild -bb \
-  --define "_version $VERSION" \
-  --define "_source $TARBALL_URL" \
-  --define "_repo $REPO" \
+  --define "_version $version" \
+  --define "_source $tarball_url" \
+  --define "_repo $repo" \
   $spec_dir/$spec_file
 
 rpm_build_code=$?
@@ -106,10 +117,11 @@ rpm_build_code=$?
 # update release to show build has finished #
 #############################################
 
-if [ $rpm_build_code -eq 0]; then
+if [ $rpm_build_code -eq 0 ]; then
   build_finished_message="\r\nBuild finisehd on $(date)\r\n\r\n#### MD5 Sums"
   for rpm in $(find $rpm_dir -type f -name *.rpm); do
-    build_finished_message=$build_finished_message"\r\n$rpm - $(openssl md5 $file | awk '{print $2}')"
+    build_finished_message=$build_finished_message"\r\n* $(openssl md5 $rpm | awk -F '[ /)]' '{print $6 " - " $8 "\n"}')"
+    upload_file_to_release $rpm
   done
 else
   build_finished_message="\r\nBuild FAILED on $(date)"
