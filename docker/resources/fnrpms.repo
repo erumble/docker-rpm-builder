@@ -1,0 +1,5 @@
+[fnrpms]
+baseurl = https://s3.amazonaws.com/fnrpms/$releasever/$basearch
+enabled = 1
+gpgcheck = 0
+name = s3 bucket full of rpms
