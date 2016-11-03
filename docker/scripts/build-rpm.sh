@@ -4,6 +4,7 @@
 # TODO: deposit the RPM to an s3 bucket
 # TODO: handle errors
 # TODO: make it idempotent
+# TODO: build for both cent 6 and 7
 ######################################################################
 
 ################################
